@@ -1,0 +1,127 @@
+## 1. Overview
+This project is a **simulated file sharing application** designed to mimic the functionality of a SaaS-style file collaboration platform. It will **not** implement actual file storage or sharing. Instead, it will:  
+- Provide a **UI** (React + React Router + Tailwind).  
+- Manage users and fake file sharing links in a **SQLite/Postgres database via Prisma ORM**.  
+- Expose **API endpoints** for querying users, files, audit logs, and global settings (OpenAPI / Swagger).  
+- Generate **synthetic audit logs** (logins, downloads, attack spikes) at configurable rates for use by external security tools.  
+- Include **type checking, linting, and Prisma validation** (mandatory).  
+- Include **GitHub Actions** for CI checks.  
+- Be deployable as a **Docker container**.  
+
+This allows the app to act as a **realistic honeypot / testing target** for tools analyzing SaaS environments.
+
+---
+
+## 2. Architecture
+- **Frontend**: React (latest React Router, TailwindCSS).  
+- **Backend**: Node.js + Express (REST APIs).  
+- **ORM**: Prisma.  
+- **Database**: SQLite by default, Postgres supported.  
+- **Seeding**: Controlled by environment variables.  
+- **Deployment**: Docker container with multi-stage build.  
+
+---
+
+## 3. Authentication
+- Admin login only.  
+- Fixed **username/password** in `.env`.  
+- No MFA, no real IdP login (attributes exist but unused).  
+
+---
+
+## 4. Core Data Models
+
+### Users
+- **Attributes**:  
+  - `id` (UUID)  
+  - `firstName` / `lastName`  
+  - `email` (unique, generated as firstname.lastname@exampleapp.com)  
+  - `role` (enum: `admin`, `superadmin`, `user`, `guest`)  
+  - `mfaEnabled` (boolean)  
+  - `allowLocalLogin` (boolean)  
+  - `allowIdpLogin` (boolean)  
+  - `active` (boolean)  
+
+### File Sharing Links
+- **Attributes**:  
+  - `id` (UUID)  
+  - `ownerId` (foreign key → Users)  
+  - `fileName` (GUID string)  
+  - `fileType` (enum of 10 fixed values, incl. `pdf`, `xlsx`)  
+  - `hasPassword` (boolean)  
+  - `expiryDate` (date)  
+  - `active` (boolean)  
+
+### Audit Logs
+- **Attributes**:  
+  - `id` (UUID)  
+  - `timestamp` (datetime)  
+  - `eventType` (enum: `login`, `download`, `failedLogin`, `failedDownload`)  
+  - `userId` (nullable)  
+  - `fileId` (nullable)  
+  - `ipAddress` (Australian IP range)  
+  - `userAgent` (Chrome / Safari only)  
+  - `details` (string)  
+
+### Global Settings
+- **Attributes**:  
+  - `id` (singleton row)  
+  - `allowedIpRanges` (array of CIDRs)  
+  - `forceIdpLogin` (boolean)  
+  - `sharingLevel` (enum: `doNotAllowPasswords`, `allowPasswords`, `forcePasswords`)  
+
+---
+
+## 5. Features
+
+### Admin UI
+- Login screen (fixed credentials).  
+- **User Management**: CRUD + toggle MFA, local login, IdP login.  
+- **File Sharing Links Management**: CRUD + assign to user.  
+- **Audit Log Viewer**: Search + filter by user, file, event type.  
+- **Global Settings**: Edit and save settings.  
+
+### Background Simulator
+- Random audit log events at configurable rate (env var: `LOG_EVENTS_PER_SECOND`).  
+- Spikes: At random intervals, inject bursts of 5× normal event rate with failed logins or mass downloads.  
+- Logs expire after `LOG_RETENTION_DAYS` (configurable).  
+
+---
+
+## 6. APIs (Read-Only)
+- **GET /api/users** – list all users with attributes.  
+- **GET /api/files** – list all files (paginated).  
+- **GET /api/audit-logs** – list logs (paginated + filters).  
+- **GET /api/settings** – global settings.  
+- **Swagger**: Full OpenAPI 3.0 spec generated.  
+
+---
+
+## 7. Seeding
+Controlled by env vars:  
+- `SEED=true|false` → whether to reset & reseed.  
+- `SEED_USERS=n` → number of users.  
+- `SEED_FILES=n` → number of files.  
+- **Users**: Randomly chosen from 500 first/last names.  
+- **Files**: Random type, owner, GUID name.  
+- **Global Settings**: Randomized.  
+
+---
+
+## 8. Non-Functional Requirements
+- Minimal UI (focus on dummy data, not polish).  
+- Portable (runs locally with SQLite).  
+- Configurable via `.env`.  
+- Code structured for extensibility.  
+- **Type checking (TypeScript)** is mandatory.  
+- **Linting (ESLint + Prettier)** is mandatory.  
+- **Prisma validation** must pass for schema changes.  
+- **GitHub Actions CI pipeline**:  
+  - Run linting.  
+  - Run type checking.  
+  - Run Prisma validation.  
+  - Run basic build test.  
+- **Docker deployment**:  
+  - Multi-stage Dockerfile (build + runtime).  
+  - Containerized DB (Postgres option).  
+  - App must run with `docker-compose up`.  
