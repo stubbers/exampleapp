@@ -1,5 +1,5 @@
 # Build stage
-FROM node:18 AS builder
+FROM node:20 AS builder
 
 WORKDIR /app
 
@@ -7,8 +7,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig*.json ./
 COPY vite.config.ts ./
-COPY tailwind.config.js ./
 COPY postcss.config.js ./
+COPY eslint.config.js ./
 
 # Install dependencies
 RUN npm ci
@@ -25,7 +25,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:18-slim AS production
+FROM node:20-slim AS production
 
 # Install OpenSSL for Prisma compatibility
 RUN apt-get update && apt-get install -y openssl wget && rm -rf /var/lib/apt/lists/*
