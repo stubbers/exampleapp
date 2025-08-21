@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite doesn't support enums, so we use String fields with validation in the application
+
+model User {
+  id              String  @id @default(uuid())
+  firstName       String
+  lastName        String
+  email           String  @unique
+  role            String  // admin, superadmin, user, guest
+  mfaEnabled      Boolean @default(false)
+  allowLocalLogin Boolean @default(true)
+  allowIdpLogin   Boolean @default(false)
+  active          Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  ownedFiles      FileSharingLink[]
+  auditLogs       AuditLog[]
+
+  @@map("users")
+}
+
+model FileSharingLink {
+  id          String   @id @default(uuid())
+  ownerId     String
+  fileName    String
+  fileType    String   // pdf, xlsx, docx, pptx, txt, csv, zip, jpg, png, mp4
+  hasPassword Boolean  @default(false)
+  expiryDate  DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  auditLogs   AuditLog[]
+
+  @@map("file_sharing_links")
+}
+
+model AuditLog {
+  id        String    @id @default(uuid())
+  timestamp DateTime  @default(now())
+  eventType String    // login, download, failedLogin, failedDownload
+  userId    String?
+  fileId    String?
+  ipAddress String
+  userAgent String
+  details   String?
+
+  // Relations
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  file      FileSharingLink? @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model GlobalSettings {
+  id             Int      @id @default(1)
+  allowedIpRanges String  @default("[]") // JSON string array
+  forceIdpLogin  Boolean  @default(false)
+  sharingLevel   String   @default("allowPasswords") // doNotAllowPasswords, allowPasswords, forcePasswords
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("global_settings")
+}
