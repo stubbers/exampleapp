@@ -56,8 +56,10 @@ jobs:
             -e NODE_ENV=test \
             -e DATABASE_URL="file:./test.db" \
             -e JWT_SECRET="test-jwt-secret-for-ci" \
+            -e SEED_USERS="10" \
+            -e SEED_FILES="20" \
             exampleapp:test
-          sleep 10
+          sleep 30
           curl -f http://localhost:3001/health || exit 1
           docker stop exampleapp-test
 

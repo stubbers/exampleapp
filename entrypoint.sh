@@ -22,6 +22,14 @@ echo "Environment: $NODE_ENV"
 echo "Initializing database..."
 npx prisma db push --force-reset
 
+# Rename server files to avoid ES module conflicts and fix imports
+find dist/server -name "*.js" -exec sh -c '
+  # Fix relative imports in the file before renaming
+  sed -i "s|require(\"\./|require(\"\./|g; s|require(\"\./\([^\"]*\)\")|require(\"\./\1.cjs\")|g" "$1"
+  # Rename the file
+  mv "$1" "${1%.js}.cjs"
+' _ {} \;
+
 # Start the application
 echo "Starting server..."
-exec node dist/server/index.js
+exec node dist/server/index.cjs
