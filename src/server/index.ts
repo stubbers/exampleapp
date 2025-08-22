@@ -64,7 +64,7 @@ app.use('*', async (c, next) => {
     return
   }
   
-  return serveStatic({ root: staticPath, index: '' })(c, next)
+  return serveStatic({ root: staticPath })(c, next)
 })
 
 // Catch-all handler: send back React app with dynamic base URL
