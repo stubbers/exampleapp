@@ -2,6 +2,7 @@
   "name": "exampleapp",
   "version": "1.0.0",
   "description": "A simulated file sharing application for security testing",
+  "type": "module",
   "main": "dist/server.js",
   "scripts": {
     "dev": "npm run build:client && tsx watch src/server/index.ts",
