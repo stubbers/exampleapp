@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useApi } from '../hooks/useApi'
+import { useLiveData } from '../hooks/useLiveData'
 import { useAuth } from '../contexts/AuthContext'
 import type { User, FileSharingLink, AuditLog, PaginatedResponse } from '@/shared/types'
 
@@ -10,7 +11,8 @@ export default function DashboardPage() {
   const { logout } = useAuth()
   const { data: usersData } = useApi<PaginatedResponse<User>>('/api/users?limit=5')
   const { data: filesData } = useApi<PaginatedResponse<FileSharingLink>>('/api/files?limit=5')
-  const { data: auditData } = useApi<PaginatedResponse<AuditLog>>('/api/audit-logs?limit=10')
+  const { data: recentLogsCount } = useLiveData<{ count: number }>('/api/audit-logs/recent-count')
+  const { data: recentLogs } = useLiveData<PaginatedResponse<AuditLog>>('/api/audit-logs?limit=5')
 
   const handleInjectAttack = async () => {
     setIsInjectingAttack(true)
@@ -59,8 +61,8 @@ export default function DashboardPage() {
     },
     {
       name: 'Recent Events',
-      value: auditData?.data.length || 0,
-      description: 'Audit events in the last hour'
+      value: recentLogsCount?.count || 0,
+      description: 'Audit events in the last 5 minutes'
     }
   ]
 
@@ -97,29 +99,40 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Users</h2>
-          {usersData ? (
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Logs</h2>
+          {recentLogs ? (
             <div className="space-y-3">
-              {usersData.data.map((user) => (
-                <div key={user.id} className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      {user.firstName} {user.lastName}
-                    </p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
+              {recentLogs.data.map((log) => (
+                <div key={log.id} className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        log.eventType === 'login' ? 'bg-green-100 text-green-800' :
+                        log.eventType === 'download' ? 'bg-blue-100 text-blue-800' :
+                        log.eventType === 'failedLogin' ? 'bg-red-100 text-red-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {log.eventType}
+                      </span>
+                      <p className="text-sm text-gray-900 truncate">
+                        {log.user ? `${log.user.firstName} ${log.user.lastName}` : 'Unknown User'}
+                      </p>
+                    </div>
+                    <div className="flex items-center space-x-2 mt-1">
+                      <p className="text-xs text-gray-500">{log.ipAddress}</p>
+                      <span className="text-xs text-gray-400">•</span>
+                      <p className="text-xs text-gray-500">
+                        {new Date(log.timestamp).toLocaleTimeString()}
+                      </p>
+                    </div>
                   </div>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    user.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {user.active ? 'Active' : 'Inactive'}
-                  </span>
                 </div>
               ))}
             </div>
           ) : (
             <div className="animate-pulse space-y-3">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-10 bg-gray-200 rounded"></div>
+                <div key={i} className="h-16 bg-gray-200 rounded"></div>
               ))}
             </div>
           )}

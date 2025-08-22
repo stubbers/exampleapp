@@ -1,27 +1,28 @@
-import { Request, Response, NextFunction } from 'express'
+import { Context, Next } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string
-    email: string
-    role: string
+export interface AuthUser {
+  id: string
+  email: string
+  role: string
+}
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    user: AuthUser
   }
 }
 
-export const authenticateToken = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-) => {
-  const authHeader = req.headers.authorization
+export const authenticateToken = async (c: Context, next: Next) => {
+  const authHeader = c.req.header('authorization')
   const token = authHeader && authHeader.split(' ')[1]
 
   if (!token) {
-    return res.status(401).json({ success: false, error: 'Access token required' })
+    throw new HTTPException(401, { message: 'Access token required' })
   }
 
   try {
@@ -32,24 +33,27 @@ export const authenticateToken = async (
     })
 
     if (!user || !user.active) {
-      return res.status(401).json({ success: false, error: 'Invalid or inactive user' })
+      throw new HTTPException(401, { message: 'Invalid or inactive user' })
     }
 
-    req.user = user
-    next()
-  } catch {
-    return res.status(403).json({ success: false, error: 'Invalid token' })
+    c.set('user', user)
+    await next()
+  } catch (error) {
+    if (error instanceof HTTPException) throw error
+    throw new HTTPException(403, { message: 'Invalid token' })
   }
 }
 
-export const requireAdmin = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  if (!req.user) {
-    return res.status(401).json({ success: false, error: 'Authentication required' })
+export const requireAdmin = async (c: Context, next: Next) => {
+  const user = c.get('user')
+  
+  if (!user) {
+    throw new HTTPException(401, { message: 'Authentication required' })
   }
 
-  if (req.user.role !== 'admin' && req.user.role !== 'superadmin') {
-    return res.status(403).json({ success: false, error: 'Admin access required' })
+  if (user.role !== 'admin' && user.role !== 'superadmin') {
+    throw new HTTPException(403, { message: 'Admin access required' })
   }
 
-  next()
+  await next()
 }

@@ -1,7 +1,9 @@
-import express from 'express'
-import cors from 'cors'
-import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
+import { Hono } from 'hono'
+import { cors } from 'hono/cors'
+import { secureHeaders } from 'hono/secure-headers'
+// Rate limiting will be handled differently in Hono
+import { serveStatic } from '@hono/node-server/serve-static'
+import { serve } from '@hono/node-server'
 import dotenv from 'dotenv'
 import path from 'path'
 import fs from 'fs'
@@ -17,71 +19,63 @@ import { startAuditSimulator } from './services/auditSimulator'
 
 dotenv.config()
 
-const app = express()
+const app = new Hono()
 const prisma = new PrismaClient()
 const PORT = parseInt(process.env.PORT || '3001')
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  message: 'Too many requests from this IP, please try again later.',
+// Configure security and middleware
+app.use('*', cors())
+app.use('*', secureHeaders())
+
+// Custom headers middleware
+app.use('*', async (c, next) => {
+  await next()
+  c.res.headers.set('X-Frame-Options', 'SAMEORIGIN')
+  c.res.headers.set('X-Content-Type-Options', 'nosniff')
 })
 
-// Configure helmet with relaxed security for local development
-app.use(helmet({
-  contentSecurityPolicy: false,  // Disable CSP that might force HTTPS
-  hsts: false,                   // Disable HTTPS Strict Transport Security
-  crossOriginEmbedderPolicy: false
-}))
-app.use(cors())
-app.use(limiter)
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
+// Setup API routes first
+app.route('/api/auth', authRoutes)
+app.route('/api/users', userRoutes)
+app.route('/api/files', fileRoutes)
+app.route('/api/audit-logs', auditRoutes)
+app.route('/api/settings', settingsRoutes)
 
-// Add headers to prevent HTTPS upgrades and mixed content issues
-app.use((_req, res, next) => {
-  // Remove any CSP headers that might force HTTPS
-  res.removeHeader('Content-Security-Policy')
-  // Explicitly allow mixed content for development
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
-  res.setHeader('X-Content-Type-Options', 'nosniff')
-  next()
+app.get('/health', (c) => {
+  return c.json({ status: 'OK', timestamp: new Date().toISOString() })
 })
 
+// Setup Swagger docs (must be before static files)
 setupSwagger(app)
-
-app.use('/api/auth', authRoutes)
-app.use('/api/users', userRoutes)
-app.use('/api/files', fileRoutes)
-app.use('/api/audit-logs', auditRoutes)
-app.use('/api/settings', settingsRoutes)
-
-app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() })
-})
 
 // Serve static files in both development and production
 const isDev = process.env.NODE_ENV !== 'production'
 const staticPath = isDev 
-  ? path.join(__dirname, '../../dist/client')  // Development with tsx
-  : path.join(__dirname, '../client')          // Production build
+  ? path.join(process.cwd(), 'dist/client')  // Development with tsx
+  : path.join(__dirname, '../client')        // Production build
 
-// Serve static files except index.html (we'll handle that in the catch-all)
-app.use(express.static(staticPath, { index: false }))
+// Serve static files except for API routes
+app.use('*', async (c, next) => {
+  const path = c.req.path
+  // Skip static serving for API and docs routes
+  if (path.startsWith('/api') || path.startsWith('/health') || path.startsWith('/api-docs')) {
+    await next()
+    return
+  }
+  
+  return serveStatic({ root: staticPath, index: '' })(c, next)
+})
 
 // Catch-all handler: send back React app with dynamic base URL
-app.get('*', (req, res) => {
+app.get('*', async (c) => {
   const htmlPath = path.join(staticPath, 'index.html')
   
-  fs.readFile(htmlPath, 'utf8', (err: NodeJS.ErrnoException | null, data: string) => {
-    if (err) {
-      res.status(500).send('Error loading page')
-      return
-    }
+  try {
+    const data = fs.readFileSync(htmlPath, 'utf8')
     
     // Get the protocol and host from the request
-    const protocol = req.get('X-Forwarded-Proto') || (req.secure ? 'https' : 'http')
-    const host = req.get('Host')
+    const protocol = c.req.header('X-Forwarded-Proto') || 'http'
+    const host = c.req.header('Host')
     const baseUrl = `${protocol}://${host}`
     
     // Inject base tag to ensure all relative URLs use HTTP
@@ -90,9 +84,11 @@ app.get('*', (req, res) => {
       `<head>\n    <base href="${baseUrl}/">`
     )
     
-    res.setHeader('Content-Type', 'text/html')
-    res.send(modifiedHtml)
-  })
+    c.header('Content-Type', 'text/html')
+    return c.body(modifiedHtml)
+  } catch {
+    return c.text('Error loading page', 500)
+  }
 })
 
 async function startServer() {
@@ -109,10 +105,14 @@ async function startServer() {
     startAuditSimulator()
     console.log('Audit simulator started')
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server running on port ${PORT}`)
-      console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`)
+    serve({
+      fetch: app.fetch,
+      port: PORT,
+      hostname: '0.0.0.0'
     })
+    
+    console.log(`Server running on port ${PORT}`)
+    console.log(`Swagger docs available at http://localhost:${PORT}/api-docs`)
   } catch (error) {
     console.error('Failed to start server:', error)
     process.exit(1)

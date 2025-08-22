@@ -38,14 +38,23 @@ jobs:
 
       - name: Generate Prisma client
         run: npx prisma generate
+        env:
+          DATABASE_URL: "file:./test.db"
 
       - name: Build application
         run: npm run build
+        env:
+          DATABASE_URL: "file:./test.db"
+          JWT_SECRET: "test-jwt-secret-for-ci"
 
       - name: Test Docker build
         run: |
           docker build -t exampleapp:test .
-          docker run --rm -d --name exampleapp-test -p 3001:3001 -e NODE_ENV=test exampleapp:test
+          docker run --rm -d --name exampleapp-test -p 3001:3001 \
+            -e NODE_ENV=test \
+            -e DATABASE_URL="file:./test.db" \
+            -e JWT_SECRET="test-jwt-secret-for-ci" \
+            exampleapp:test
           sleep 10
           curl -f http://localhost:3001/health || exit 1
           docker stop exampleapp-test

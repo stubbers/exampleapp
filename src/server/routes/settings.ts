@@ -1,50 +1,20 @@
-import express from 'express'
+import { Hono } from 'hono'
+import { HTTPException } from 'hono/http-exception'
 import { PrismaClient, Prisma } from '@prisma/client'
 import { authenticateToken, requireAdmin } from '../middleware/auth'
-import type { GlobalSettings, ApiResponse, SharingLevel } from '@/shared/types'
 
-const router = express.Router()
+const settings = new Hono()
 const prisma = new PrismaClient()
 
-/**
- * @swagger
- * /api/settings:
- *   get:
- *     summary: Get global application settings
- *     description: Retrieve the current global settings for the application. Creates default settings if none exist. Public endpoint (no authentication required).
- *     tags: [Settings]
- *     responses:
- *       200:
- *         description: Successfully retrieved global settings
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       $ref: '#/components/schemas/GlobalSettings'
- *             example:
- *               success: true
- *               data:
- *                 id: 1
- *                 allowedIpRanges: ["203.1.0.0/16", "10.0.0.0/8"]
- *                 forceIdpLogin: false
- *                 sharingLevel: "allowPasswords"
- *                 createdAt: "2024-01-15T10:30:00.000Z"
- *                 updatedAt: "2024-01-15T10:30:00.000Z"
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.get('/', async (_req, res) => {
+// Public endpoint
+settings.get('/', async (c) => {
   try {
-    let settings = await prisma.globalSettings.findFirst({
+    let settingsData = await prisma.globalSettings.findFirst({
       where: { id: 1 }
     })
 
-    if (!settings) {
-      settings = await prisma.globalSettings.create({
+    if (!settingsData) {
+      settingsData = await prisma.globalSettings.create({
         data: {
           allowedIpRanges: '[]',
           forceIdpLogin: false,
@@ -53,99 +23,46 @@ router.get('/', async (_req, res) => {
       })
     }
 
-    const formattedSettings: GlobalSettings = {
-      id: settings.id,
-      allowedIpRanges: JSON.parse(settings.allowedIpRanges),
-      forceIdpLogin: settings.forceIdpLogin,
-      sharingLevel: settings.sharingLevel as SharingLevel,
-      createdAt: settings.createdAt.toISOString(),
-      updatedAt: settings.updatedAt.toISOString()
+    const formattedSettings = {
+      id: settingsData.id,
+      allowedIpRanges: JSON.parse(settingsData.allowedIpRanges),
+      forceIdpLogin: settingsData.forceIdpLogin,
+      sharingLevel: settingsData.sharingLevel,
+      createdAt: settingsData.createdAt.toISOString(),
+      updatedAt: settingsData.updatedAt.toISOString()
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: formattedSettings
-    } as ApiResponse<GlobalSettings>)
+    })
   } catch (error) {
     console.error('Get settings error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse)
+    throw new HTTPException(500, { message: 'Internal server error' })
   }
 })
 
-router.use(authenticateToken)
-router.use(requireAdmin)
+// Protected routes
+settings.use('*', authenticateToken, requireAdmin)
 
-/**
- * @swagger
- * /api/settings:
- *   put:
- *     summary: Update global application settings
- *     description: Update global settings for IP restrictions, IdP enforcement, and file sharing policies. Only specified fields will be updated. Requires admin authentication.
- *     tags: [Settings]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateGlobalSettingsRequest'
- *           example:
- *             allowedIpRanges: ["203.1.0.0/16", "192.168.1.0/24"]
- *             forceIdpLogin: true
- *             sharingLevel: "forcePasswords"
- *     responses:
- *       200:
- *         description: Settings updated successfully
- *         content:
- *           application/json:
- *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/ApiResponse'
- *                 - type: object
- *                   properties:
- *                     data:
- *                       $ref: '#/components/schemas/GlobalSettings'
- *             example:
- *               success: true
- *               data:
- *                 id: 1
- *                 allowedIpRanges: ["203.1.0.0/16", "192.168.1.0/24"]
- *                 forceIdpLogin: true
- *                 sharingLevel: "forcePasswords"
- *                 createdAt: "2024-01-15T10:30:00.000Z"
- *                 updatedAt: "2024-01-15T12:30:00.000Z"
- *       400:
- *         $ref: '#/components/responses/BadRequest'
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       403:
- *         $ref: '#/components/responses/Forbidden'
- *       500:
- *         $ref: '#/components/responses/InternalServerError'
- */
-router.put('/', async (req, res) => {
+settings.put('/', async (c) => {
   try {
-    const { allowedIpRanges, forceIdpLogin, sharingLevel } = req.body
+    const body = await c.req.json()
+    const { allowedIpRanges, forceIdpLogin, sharingLevel } = body
 
     const updateData: Prisma.GlobalSettingsUpdateInput = {}
 
     if (allowedIpRanges !== undefined) {
       updateData.allowedIpRanges = JSON.stringify(allowedIpRanges)
     }
-
     if (typeof forceIdpLogin === 'boolean') {
       updateData.forceIdpLogin = forceIdpLogin
     }
-
     if (sharingLevel) {
       updateData.sharingLevel = sharingLevel
     }
 
-    const settings = await prisma.globalSettings.upsert({
+    const settingsData = await prisma.globalSettings.upsert({
       where: { id: 1 },
       update: updateData,
       create: {
@@ -155,26 +72,23 @@ router.put('/', async (req, res) => {
       }
     })
 
-    const formattedSettings: GlobalSettings = {
-      id: settings.id,
-      allowedIpRanges: JSON.parse(settings.allowedIpRanges),
-      forceIdpLogin: settings.forceIdpLogin,
-      sharingLevel: settings.sharingLevel as SharingLevel,
-      createdAt: settings.createdAt.toISOString(),
-      updatedAt: settings.updatedAt.toISOString()
+    const formattedSettings = {
+      id: settingsData.id,
+      allowedIpRanges: JSON.parse(settingsData.allowedIpRanges),
+      forceIdpLogin: settingsData.forceIdpLogin,
+      sharingLevel: settingsData.sharingLevel,
+      createdAt: settingsData.createdAt.toISOString(),
+      updatedAt: settingsData.updatedAt.toISOString()
     }
 
-    res.json({
+    return c.json({
       success: true,
       data: formattedSettings
-    } as ApiResponse<GlobalSettings>)
+    })
   } catch (error) {
     console.error('Update settings error:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    } as ApiResponse)
+    throw new HTTPException(500, { message: 'Internal server error' })
   }
 })
 
-export default router
+export default settings
