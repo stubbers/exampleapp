@@ -9,13 +9,13 @@ import path from 'path'
 import fs from 'fs'
 import { PrismaClient } from '@prisma/client'
 
-import authRoutes from './routes/auth'
-import userRoutes from './routes/users'
-import fileRoutes from './routes/files'
-import auditRoutes from './routes/audit'
-import settingsRoutes from './routes/settings'
-import { setupSwagger } from './swagger'
-import { startAuditSimulator } from './services/auditSimulator'
+import authRoutes from './routes/auth.js'
+import userRoutes from './routes/users.js'
+import fileRoutes from './routes/files.js'
+import auditRoutes from './routes/audit.js'
+import settingsRoutes from './routes/settings.js'
+import { setupSwagger } from './swagger.js'
+import { startAuditSimulator } from './services/auditSimulator.js'
 
 dotenv.config()
 
@@ -97,7 +97,7 @@ async function startServer() {
     console.log('Database connected successfully')
 
     if (process.env.SEED === 'true') {
-      const { seedDatabase } = await import('./seed')
+      const { seedDatabase } = await import('./seed.js')
       await seedDatabase()
       console.log('Database seeded successfully')
     }

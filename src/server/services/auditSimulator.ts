@@ -4,7 +4,7 @@ import {
   generateRandomIP,
   EVENT_TYPES,
   USER_AGENTS
-} from '../utils/generators'
+} from '../utils/generators.js'
 
 const prisma = new PrismaClient()
 

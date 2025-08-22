@@ -8,7 +8,7 @@ import {
   getRandomElement,
   FILE_TYPES,
   USER_ROLES
-} from './utils/generators'
+} from './utils/generators.js'
 
 const prisma = new PrismaClient()
 
@@ -93,7 +93,7 @@ export async function seedDatabase() {
   }
 }
 
-if (require.main === module) {
+if (import.meta.url === `file://${process.argv[1]}`) {
   seedDatabase()
     .catch((error) => {
       console.error('Seeding failed:', error)

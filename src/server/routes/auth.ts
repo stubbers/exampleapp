@@ -3,7 +3,7 @@ import { HTTPException } from 'hono/http-exception'
 import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
 import type { LoginRequest, AuthToken, ApiResponse, UserRole } from '@/shared/types'
-import { authenticateToken, requireAdmin } from '../middleware/auth'
+import { authenticateToken, requireAdmin } from '../middleware/auth.js'
 
 const auth = new Hono()
 const prisma = new PrismaClient()
