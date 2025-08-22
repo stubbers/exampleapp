@@ -16,7 +16,6 @@ RUN npm ci
 # Copy source code
 COPY src/ ./src/
 COPY prisma/ ./prisma/
-COPY public/ ./public/
 
 # Generate Prisma client
 RUN npx prisma generate
