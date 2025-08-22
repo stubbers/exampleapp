@@ -50,6 +50,7 @@ setupSwagger(app)
 
 // Serve static files in both development and production
 const isDev = process.env.NODE_ENV !== 'production'
+const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const staticPath = isDev 
   ? path.join(process.cwd(), 'dist/client')  // Development with tsx
   : path.join(__dirname, '../client')        // Production build
